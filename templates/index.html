@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>J.A.R.V.I.S HUD Voice Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap" rel="stylesheet">
+<style>
+/* --- Body & background --- */
+body {
+    margin: 0;
+    font-family: 'Orbitron', sans-serif;
+    background: radial-gradient(circle at center, #0b0c10, #1f2833);
+    overflow: hidden;
+}
+
+/* --- Animated background lines --- */
+@keyframes rotateLines {
+    0% {transform: rotate(0deg);}
+    100% {transform: rotate(360deg);}
+}
+#background {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    background: repeating-conic-gradient(#45a29e 0deg 1deg, transparent 1deg 10deg);
+    animation: rotateLines 30s linear infinite;
+    opacity: 0.05;
+}
+
+/* --- Chat container --- */
+#chat {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%;
+    height: 55%;
+    background: rgba(15,15,20,0.85);
+    border: 2px solid #45a29e;
+    border-radius: 25px;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 50px #45a29e, 0 0 100px #45a29e inset;
+}
+
+/* --- Messages --- */
+.user, .jarvis {
+    margin: 10px 0;
+    padding: 12px 18px;
+    border-radius: 25px;
+    max-width: 70%;
+    display: flex;
+    align-items: center;
+    animation: fadeIn 0.4s;
+}
+.user {
+    background: rgba(102, 252, 241, 0.2);
+    color: #66fcf1;
+    margin-left: auto;
+}
+.user::before { content: "🧑‍💻"; margin-right: 10px; }
+.jarvis {
+    background: rgba(241, 196, 15, 0.2);
+    color: #f1c40f;
+    margin-right: auto;
+}
+.jarvis::before { content: "🤖"; margin-right: 10px; }
+
+/* --- Typing dots --- */
+.typing span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin: 0 2px;
+    background: #f1c40f;
+    border-radius: 50%;
+    animation: blink 1s infinite;
+}
+.typing span:nth-child(2){animation-delay: 0.2s;}
+.typing span:nth-child(3){animation-delay: 0.4s;}
+@keyframes blink { 0%, 80%, 100% { opacity: 0;} 40% {opacity:1;} }
+
+/* --- Input box --- */
+#inputBox {
+    position: absolute;
+    bottom: 5%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50%;
+    padding: 18px;
+    border-radius: 25px;
+    border: none;
+    background: rgba(15,15,20,0.9);
+    color: #66fcf1;
+    font-size: 18px;
+    box-shadow: 0 0 20px #45a29e, 0 0 50px #45a29e inset;
+}
+
+/* --- Animations --- */
+@keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+</style>
+</head>
+<body>
+<div id="background"></div>
+<div id="chat"></div>
+<input type="text" id="inputBox" placeholder="Ask something, Sir..." aria-label="Type your question here" autofocus />
+
+<script>
+const chat = document.getElementById("chat");
+const inputBox = document.getElementById("inputBox");
+const userName = "Bobby"; // <-- Your Name
+
+// Append message in chat
+function appendMessage(text, cls){
+    const p = document.createElement("p");
+    p.className = cls;
+    p.textContent = text;
+    chat.appendChild(p);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+// Voice function
+function speak(text){
+    if('speechSynthesis' in window){
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.rate = 1;
+        msg.pitch = 1;
+        msg.volume = 1;
+        window.speechSynthesis.speak(msg);
+    }
+}
+
+// Typing animation
+function appendTyping(){
+    const typingDiv = document.createElement("p");
+    typingDiv.className="jarvis typing";
+    typingDiv.innerHTML = '<span></span><span></span><span></span> J.A.R.V.I.S is listening...';
+    chat.appendChild(typingDiv);
+    chat.scrollTop = chat.scrollHeight;
+    return typingDiv;
+}
+
+// --- Voice Recognition ---
+if ('webkitSpeechRecognition' in window){
+    const recognition = new webkitSpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onstart = function(){
+        const typingDiv = appendTyping();
+    };
+
+    recognition.onresult = function(event){
+        const last = event.results.length - 1;
+        const command = event.results[last][0].transcript.trim();
+        appendMessage(command, "user");
+
+        // First greeting when user speaks
+        if(command.toLowerCase().includes("hello") || command.toLowerCase().includes("hlo")){
+            const greeting = `Hello ${userName}, I am ready to assist you.`;
+            appendMessage(greeting, "jarvis");
+            speak(greeting);
+        }
+
+        // Send to backend for AI processing
+        fetch("/ask",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({question: command})
+        })
+        .then(res => res.json())
+        .then(data => {
+            appendMessage(data.answer, "jarvis");
+            speak(data.answer);
+        });
+    };
+
+    recognition.start();  // --- Auto start listening
+} else {
+    appendMessage("Voice recognition not supported in this browser.", "jarvis");
+}
+
+// Optional: also handle manual input typing
+inputBox.addEventListener("keypress", function(e){
+    if(e.key==="Enter"){
+        const userText = inputBox.value.trim();
+        if(!userText) return;
+        appendMessage(userText, "user");
+        inputBox.value="";
+        appendTyping();
+
+        fetch("/ask",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({question: userText})
+        })
+        .then(res => res.json())
+        .then(data => {
+            appendMessage(data.answer, "jarvis");
+            speak(data.answer);
+        });
+    }
+});
+</script>
+</body>
+</html>

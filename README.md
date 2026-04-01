@@ -91,13 +91,8 @@ jarvis-chatbot/
 
 ## 🙋‍♂️ Author
 **Bobby Bohra**
-- GitHub: [@BobbyBohra](https://github.com/BobbyBohra)
+- GitHub: https://github.com/BobbyBohra
 
-## ⭐ Support
-Agar ye project pasand aaya toh **Star** zaroor do! 🌟
-```
-
----
 
 ## GitHub pe Add Karo:
 

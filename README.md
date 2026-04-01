@@ -93,9 +93,3 @@ jarvis-chatbot/
 **Bobby Bohra**
 - GitHub: https://github.com/BobbyBohra
 
-
-## GitHub pe Add Karo:
-
-Browser mein kholo:
-```
-https://github.com/BobbyBohra/jarvis-chatbot/new/main

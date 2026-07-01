@@ -52,7 +52,8 @@ body {
     border-radius: 25px;
     max-width: 70%;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     animation: fadeIn 0.4s;
 }
 .user {
@@ -60,13 +61,37 @@ body {
     color: #66fcf1;
     margin-left: auto;
 }
-.user::before { content: "🧑‍💻"; margin-right: 10px; }
+.user::before { content: "🧑‍💻 "; margin-right: 6px; }
 .jarvis {
     background: rgba(241, 196, 15, 0.2);
     color: #f1c40f;
     margin-right: auto;
 }
-.jarvis::before { content: "🤖"; margin-right: 10px; }
+.jarvis::before { content: "🤖 "; margin-right: 6px; }
+
+/* --- Code blocks inside JARVIS messages --- */
+.jarvis pre {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid #45a29e;
+    border-radius: 10px;
+    padding: 12px;
+    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+    margin: 8px 0;
+    box-sizing: border-box;
+}
+.jarvis code {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    color: #66fcf1;
+    white-space: pre;
+    line-height: 1.5;
+}
+.jarvis span {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
 
 /* --- Typing dots --- */
 .typing span {
@@ -112,19 +137,56 @@ const chat = document.getElementById("chat");
 const inputBox = document.getElementById("inputBox");
 const userName = "Bobby"; // <-- Your Name
 
-// Append message in chat
+// Append message in chat (handles ```code``` blocks separately with monospace font)
 function appendMessage(text, cls){
-    const p = document.createElement("p");
+    const p = document.createElement("div");
     p.className = cls;
-    p.textContent = text;
+
+    const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match;
+    let hasCode = false;
+
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+        hasCode = true;
+        const beforeText = text.slice(lastIndex, match.index).trim();
+        if (beforeText) {
+            const span = document.createElement("span");
+            span.textContent = beforeText;
+            p.appendChild(span);
+        }
+
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        code.textContent = match[2].trim();
+        pre.appendChild(code);
+        p.appendChild(pre);
+
+        lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    const remaining = text.slice(lastIndex).trim();
+    if (remaining) {
+        const span = document.createElement("span");
+        span.textContent = remaining;
+        p.appendChild(span);
+    }
+
+    if (!hasCode) {
+        p.textContent = text;
+    }
+
     chat.appendChild(p);
     chat.scrollTop = chat.scrollHeight;
+    return p;
 }
 
 // Voice function
 function speak(text){
     if('speechSynthesis' in window){
-        const msg = new SpeechSynthesisUtterance(text);
+        // Don't speak raw code blocks aloud, just the surrounding text
+        const cleanText = text.replace(/```[\s\S]*?```/g, "code block, check screen for details.");
+        const msg = new SpeechSynthesisUtterance(cleanText);
         msg.rate = 1;
         msg.pitch = 1;
         msg.volume = 1;
@@ -134,12 +196,32 @@ function speak(text){
 
 // Typing animation
 function appendTyping(){
-    const typingDiv = document.createElement("p");
+    const typingDiv = document.createElement("div");
     typingDiv.className="jarvis typing";
     typingDiv.innerHTML = '<span></span><span></span><span></span> J.A.R.V.I.S is listening...';
     chat.appendChild(typingDiv);
     chat.scrollTop = chat.scrollHeight;
     return typingDiv;
+}
+
+// Send question to backend and render response
+function sendToBackend(question, typingDiv){
+    fetch("/ask",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({question: question})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (typingDiv) typingDiv.remove();
+        appendMessage(data.answer, "jarvis");
+        speak(data.answer);
+    })
+    .catch(err => {
+        if (typingDiv) typingDiv.remove();
+        appendMessage("Sorry, something went wrong connecting to the server.", "jarvis");
+        console.error(err);
+    });
 }
 
 // --- Voice Recognition ---
@@ -148,10 +230,6 @@ if ('webkitSpeechRecognition' in window){
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = "en-US";
-
-    recognition.onstart = function(){
-        const typingDiv = appendTyping();
-    };
 
     recognition.onresult = function(event){
         const last = event.results.length - 1;
@@ -163,19 +241,11 @@ if ('webkitSpeechRecognition' in window){
             const greeting = `Hello ${userName}, I am ready to assist you.`;
             appendMessage(greeting, "jarvis");
             speak(greeting);
+            return;
         }
 
-        // Send to backend for AI processing
-        fetch("/ask",{
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({question: command})
-        })
-        .then(res => res.json())
-        .then(data => {
-            appendMessage(data.answer, "jarvis");
-            speak(data.answer);
-        });
+        const typingDiv = appendTyping();
+        sendToBackend(command, typingDiv);
     };
 
     recognition.start();  // --- Auto start listening
@@ -190,18 +260,8 @@ inputBox.addEventListener("keypress", function(e){
         if(!userText) return;
         appendMessage(userText, "user");
         inputBox.value="";
-        appendTyping();
-
-        fetch("/ask",{
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({question: userText})
-        })
-        .then(res => res.json())
-        .then(data => {
-            appendMessage(data.answer, "jarvis");
-            speak(data.answer);
-        });
+        const typingDiv = appendTyping();
+        sendToBackend(userText, typingDiv);
     }
 });
 </script>
